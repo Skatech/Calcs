@@ -2,19 +2,23 @@
 <head>
     <title>Inductor Calculator</title>
     <style>
+        div h4 {
+            max-width: 380px;
+            border-bottom: 1px solid #888;
+        }        
         div.param {
-            width: 360px;
+            width: 380px;
             display: flex;
             justify-content: flex-end;
         }
         div.param span {
             position: absolute;
-            left: 405px;
+            left: 425px;
             margin: 7px;
         }
         div.param button {
             position: absolute;
-            left: 370px;
+            left: 390px;
             width: 22px;
             height: 22px;
             margin: 5px;
@@ -40,39 +44,48 @@
 </body>
 <script>
     'use strict'
-    
+
     class Core {
         /** @type {string} */ name
         /** @type {number} */ Se
         /** @type {number} */ le
         /** @type {number} */ Me
+        /** @type {number} */ Al
+        /** @type {number} */ Bmax
 
-        /** @param {string} name @param {number} Se @param {number} le @param {number} Me */
-        constructor(name, Se, le, Me) {
+        /** @param {string} name @param {number} Se @param {number} le @param {number} Me @param {number} Al @param {number} Bmax */
+        constructor(name, Se, le, Me, Al, Bmax) {
             Core.all.push(this)
             this.name = name
             this.Se = Se
             this.le = le
             this.Me = Me
+            this.Al = Al
+            this.Bmax = Bmax
         }
 
         /** @type {Core[]} */ static all = []
     }
 
     class State {
-        /** @type {number} */ Se
-        /** @type {number} */ le
+        /** @type {number} */ CoreSe
+        /** @type {number} */ Corele
+        /** @type {number} */ CoreMe
+        /** @type {number} */ CoreAl
+        /** @type {number} */ CoreBmax
+        
         /** @type {number} */ Al
         /** @type {number} */ N
         /** @type {number} */ L
         /** @type {number} */ M0
-        /** @type {number} */ Bmax
+
+        /** @type {number} */ g
+        /** @type {number} */ Amax
 
         constructor() {
             this.N = 212
             this.L = 3e-3
             this.M0 = 1.26e-6 //Math.PI * 4.0e-7 
-            this.Bmax = 0.3
         }
     }
 
@@ -290,22 +303,25 @@
 
     const state = new State()
 
-    /////////////////
+    ///////////////// Constants /////////////////
     CreateOptionsGroup('constants', 'Constants')
     ParameterPresenter.create('constants', 'M0', 'Space permeablility M0, N/m:', 'M0 = PI * 4e-7')
-    ParameterPresenter.create('constants', 'Bmax', 'Max flux density Bmax, T:', 'Bmax = 0.2 - 0.3T')
+    // ParameterPresenter.create('constants', 'Bmax', 'Max flux density Bmax, T:', 'Bmax = 0.2 - 0.3T')
 
-    /////////////////
+    ///////////////// Core Parameters /////////////////
     CreateOptionsGroup('core-data', 'Core Parameters')
     ComboSelector.create('core-data', 'Predefined Cores:', 'cores', [
-            new Core("TMC-22", 2.26e-5, 49.8e-3, 1000),
-            new Core("EE16/8/5 PC40", 1.26e-5, 29.8e-3, 2000)],
-        core => ['Se', 'le', 'Me'].forEach(a => ParameterPresenter.find(a).setValue(core[a])))
-    ParameterPresenter.create('core-data', 'Se', 'Core Se, m&sup2:')
-    ParameterPresenter.create('core-data', 'le', 'Core le, m:')
-    ParameterPresenter.create('core-data', 'Me', 'Core Me, N/m:')
+            new Core("TMC-22", 2.26e-5, 49.8e-3, 1000, 844e-9, 0.3),
+            new Core("EE16/8/5 PC40", 19.24e-6, 40.18e-3, 2300, 1170e-9, 0.39)],
+        core => ['Se', 'le', 'Me', 'Al', 'Bmax'].forEach(a => ParameterPresenter.find('Core' + a).setValue(core[a])))
+    ParameterPresenter.create('core-data', 'CoreSe', 'Core Se, m&sup2:')
+    ParameterPresenter.create('core-data', 'Corele', 'Core le, m:')
+    ParameterPresenter.create('core-data', 'CoreMe', 'Core Me, N/m:')
+    ParameterPresenter.create('core-data', 'CoreAl', 'Core Al, H/N&sup2:')
+    ParameterPresenter.create('core-data', 'CoreBmax', 'Core Max flux density Bmax, T:', 'Bmax = 0.2 - 0.3T')
 
-    /////////////////
+
+    ///////////////// Coil Calculations /////////////////
     CreateOptionsGroup('coil-calcs', 'Coil Calculations')
     CalculationPresenter.create('coil-calcs',
         new Calculation('Al', ['L', 'N'], s => s.L / Math.pow(s.N, 2)),
@@ -316,5 +332,17 @@
     CalculationPresenter.create('coil-calcs',
         new Calculation('L', ['Al', 'N'], s => s.Al * Math.pow(s.N, 2)),
         'L, H:', 'L = Al * N&sup2')
+
+    ///////////////// Gap Calculations /////////////////
+    CreateOptionsGroup('gap-calcs', 'Gap Calculations')
+    // ParameterPresenter.create('gap-calcs', 'g', 'Gap g, m:')
+
+    CalculationPresenter.create('gap-calcs',
+        new Calculation('g', ['Amax', 'CoreSe', 'CoreBmax', 'M0'], s => 2 * s.M0 * s.Amax / (s.CoreSe * Math.pow(s.CoreBmax, 2))),
+        'Gap g, m:', 'g = 2 * M0 * Amax / (Se * Bmax&sup2)')
+
+    CalculationPresenter.create('gap-calcs',
+        new Calculation('Amax', ['g', 'CoreSe', 'CoreBmax', 'M0'], s => s.CoreSe * s.g * Math.pow(s.CoreBmax, 2) / (2 * s.M0)),
+        'Amax, J:', 'Amax = Se * g * Bmax&sup2 / (2 * M0)')
 </script>
 </html>
