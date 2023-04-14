@@ -22,6 +22,7 @@
             position: absolute;
             left: calc(var(--width) + 45px);
             margin: 7px;
+            font-style: italic;
         }
         div.param button {
             position: absolute;
@@ -324,7 +325,7 @@
     ParameterPresenter.create('core-data', 'Corele', 'Core le, m:')
     ParameterPresenter.create('core-data', 'CoreMe', 'Core Me, N/m:')
     ParameterPresenter.create('core-data', 'CoreAl', 'Core Al, H/N&sup2:')
-    ParameterPresenter.create('core-data', 'CoreBmax', 'Core Max flux density Bmax, T:', 'Bmax = 0.2 - 0.3T')
+    ParameterPresenter.create('core-data', 'CoreBmax', 'Core Bmax, T:', 'Bmax = 0.2 - 0.3T')
 
 
     ///////////////// Coil Calculations /////////////////
@@ -347,5 +348,11 @@
     CalculationPresenter.create('gap-calcs',
         new Calculation('Amax', ['g', 'CoreSe', 'CoreBmax', 'M0'], s => s.CoreSe * s.g * Math.pow(s.CoreBmax, 2) / (2 * s.M0)),
         'Amax, J:', 'Amax = Se * g * Bmax&sup2 / (2 * M0)')
+    CalculationPresenter.create('gap-calcs',
+        new Calculation('Imax', ['g', 'CoreBmax', 'M0', 'N'], s => s.CoreBmax * s.g / (s.M0 * s.N)),
+        'Imax, A:', 'Imax = Bmax * g / (M0 * N)')
+    CalculationPresenter.create('gap-calcs',
+        new Calculation('Lgap', ['M0', 'CoreSe', 'N', 'g'], s => s.M0 * s.CoreSe * Math.pow(s.N, 2) / s.g),
+        'Lgap, H:', 'Lgap = M0 * Se * N&sup2 / g   (to real multiply by ~1.3-1.5)')
 </script>
 </html>
