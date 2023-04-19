@@ -1,17 +1,25 @@
 <!DOCTYPE html>
 <head>
-    <title>Inductor Calculator</title>
+    <title>Inductor Calculator for BP283x LED Drivers</title>
     <style>
         :root {
-            --width: 400px;
+            /* --width: 400px; */
+            --width: 28rem;
         }
         * {
-            font-family: sans-serif;
-            font-size: 16px;
+            font-family: Consolas;
+            letter-spacing: -0.04em;
+            font-size: 1.02em;
         }
+        h1 {
+            font-size: 1.8rem;
+            margin-left: 2rem;
+        }
+
         div h4 {
-            max-width: calc(var(--width) + 45px);
+            max-width: calc(var(--width) + 2.5rem);
             border-bottom: 1px solid #888;
+            font-size: large;
         }        
         div.param {
             width: var(--width);
@@ -20,23 +28,23 @@
         }
         div.param span {
             position: absolute;
-            left: calc(var(--width) + 45px);
-            margin: 7px;
+            left: calc(var(--width) + 3rem);
+            margin: 0.45rem;
             font-style: italic;
         }
         div.param button {
             position: absolute;
-            left: calc(var(--width) + 10px);
-            width: 22px;
-            height: 22px;
-            margin: 5px;
+            left: calc(var(--width) + 0.5rem);
+            width: 1.5rem;
+            height: 1.5rem;
+            margin: 0.4rem;
         }
         div.param label {
-            margin: 5px;
+            margin: 0.3rem;
             text-align: right;
         }
         input, select {
-            width: 150px;
+            width: 9rem;
             padding: 1px 2px;
             box-sizing: border-box;
         }
@@ -47,51 +55,26 @@
     </style>
 </head>
 <body>
+    <h1>Inductor Calculator for BP283x LED Drivers</h1>
 </body>
 <script>
     'use strict'
 
-    class Core {
-        /** @type {string} */ name
-        /** @type {number} */ Se
-        /** @type {number} */ le
-        /** @type {number} */ Me
-        /** @type {number} */ Al
-        /** @type {number} */ Bmax
-
-        /** @param {string} name @param {number} Se @param {number} le @param {number} Me @param {number} Al @param {number} Bmax */
-        constructor(name, Se, le, Me, Al, Bmax) {
-            Core.all.push(this)
-            this.name = name
-            this.Se = Se
-            this.le = le
-            this.Me = Me
-            this.Al = Al
-            this.Bmax = Bmax
-        }
-
-        /** @type {Core[]} */ static all = []
-    }
-
     class State {
-        /** @type {number} */ CoreSe
-        /** @type {number} */ Corele
-        /** @type {number} */ CoreMe
-        /** @type {number} */ CoreAl
-        /** @type {number} */ CoreBmax
-        
-        /** @type {number} */ Al
-        /** @type {number} */ N
-        /** @type {number} */ L
-        /** @type {number} */ M0
+        /** @type {number} */ Uin
+        /** @type {number} */ Ton
 
-        /** @type {number} */ g
-        /** @type {number} */ Amax
+        /** @type {number} */ Uled
+        /** @type {number} */ Iled
+
+
+        /** @type {number} */ Ipeak
+        /** @type {number} */ L
+        /** @type {number} */ A
 
         constructor() {
-            this.N = 212
-            this.L = 3e-3
-            this.M0 = 1.26e-6 //Math.PI * 4.0e-7 
+            this.Uin = 310
+            this.Ton = 8e-6
         }
     }
 
@@ -321,49 +304,32 @@
 
     ///////////////// Constants /////////////////
     CreateOptionsGroup('constants', 'Constants')
-    ParameterPresenter.create('constants', 'M0', 'Space permeablility M0, N/m:', 'M0 = PI * 4e-7')
+    ParameterPresenter.create('constants', 'Uin', 'Supply DC volage Uin, V:', 'Uin = Uac * 1.41')
+    ParameterPresenter.create('constants', 'Ton', 'Duty pulse duration Ton, s:', 'Ton = ~8us')
 
-    ///////////////// Core Parameters /////////////////
-    CreateOptionsGroup('core-data', 'Core Parameters')
-    ComboSelector.create('core-data', 'Predefined Cores:', 'cores', [
-            new Core("TMC-22", 2.26e-5, 49.8e-3, 1000, 844e-9, 0.3),
-            new Core("EE16/8/5 PC40", 19.24e-6, 40.18e-3, 2300, 1170e-9, 0.39)],
-        core => ['Se', 'le', 'Me', 'Al', 'Bmax'].forEach(a => ParameterPresenter.find('Core' + a).setValue(core[a])))
-    ParameterPresenter.create('core-data', 'CoreSe', 'Core Se, m&sup2:')
-    ParameterPresenter.create('core-data', 'Corele', 'Core le, m:')
-    ParameterPresenter.create('core-data', 'CoreMe', 'Core Me, N/m:')
-    ParameterPresenter.create('core-data', 'CoreAl', 'Core Al, H/N&sup2:')
-    ParameterPresenter.create('core-data', 'CoreBmax', 'Core Bmax, T:', 'Bmax = 0.2 - 0.3T')
+    ///////////////// LED Strip Parameters /////////////////
+    CreateOptionsGroup('led-data', 'LED Strip Parameters')
+    ParameterPresenter.create('led-data', 'Uled', 'LED Strip voltage Uled, V:')
+    ParameterPresenter.create('led-data', 'Iled', 'LED Strip current Iled, A:')
 
+    ///////////////// Calculations /////////////////
+    CreateOptionsGroup('calcs', 'Calculations')
+    CalculationPresenter.create('calcs',
+        new Calculation('Ipeak', ['Iled'], s => s.Iled * 2),
+         'Pulse current Ipeak, A:', 'Ipeak = Iled * 2')
+    CalculationPresenter.create('calcs',
+        new Calculation('L', ['Uin', 'Ton', 'Uled', 'Ipeak'], s => (s.Uin - s.Uled) * s.Ton / s.Ipeak),
+         'Inductor value L, H:', 'L = (Uin - Uled) * Ton / Ipeak')
+    CalculationPresenter.create('calcs',
+        new Calculation('A', ['L', 'Ipeak'], s => s.L * Math.pow(s.Ipeak, 2) / 2),
+         'Pulse energy A, J:', 'A = L * Ipeak&sup2; / 2')
 
-    ///////////////// Coil Calculations /////////////////
-    CreateOptionsGroup('coil-calcs', 'Coil Calculations')
-    CalculationPresenter.create('coil-calcs',
-        new Calculation('Al', ['L', 'N'], s => s.L / Math.pow(s.N, 2)),
-         'Al, H/N&sup2:', 'Al = L / N&sup2')
-    CalculationPresenter.create('coil-calcs',
-        new Calculation('N', ['L', 'Al'], s => Math.sqrt(s.L / s.Al)),
-        'N:', 'N = sqrt(L / Al)')
-    CalculationPresenter.create('coil-calcs',
-        new Calculation('L', ['Al', 'N'], s => s.Al * Math.pow(s.N, 2)),
-        'L, H:', 'L = Al * N&sup2')
+    CalculationPresenter.create('calcs',
+        new Calculation('Toff', ['Uin', 'Ton', 'Uled'], s => s.Ton * (s.Uin - s.Uled) / s.Uled),
+         'Back pulse duration Toff, s:', 'Toff = Ton * (Uin - Uled) / Uled')
+    CalculationPresenter.create('calcs',
+        new Calculation('f', ['Ton', 'Toff'], s => 1e-3 / (s.Ton + s.Toff)),
+         'Work frequency f, kHz:', 'f = 1e-3 / (Ton + Toff)')
 
-    ///////////////// Gap Calculations /////////////////
-    CreateOptionsGroup('gap-calcs', 'Gap Calculations')
-    CalculationPresenter.create('gap-calcs',
-        new Calculation('g', ['Amax', 'CoreSe', 'CoreBmax', 'M0'], s => 2 * s.M0 * s.Amax / (s.CoreSe * Math.pow(s.CoreBmax, 2))),
-        'Gap g, m:', 'g = 2 * M0 * Amax / (Se * Bmax&sup2)')
-    CalculationPresenter.create('gap-calcs',
-        new Calculation('Amax', ['g', 'CoreSe', 'CoreBmax', 'M0'], s => s.CoreSe * s.g * Math.pow(s.CoreBmax, 2) / (2 * s.M0)),
-        'Amax, J:', 'Amax = Se * g * Bmax&sup2 / (2 * M0)')
-    CalculationPresenter.create('gap-calcs',
-        new Calculation('Imax', ['g', 'CoreBmax', 'M0', 'N'], s => s.CoreBmax * s.g / (s.M0 * s.N)),
-        'Imax, A:', 'Imax = Bmax * g / (M0 * N)')
-    CalculationPresenter.create('gap-calcs',
-        new Calculation('Lgap', ['M0', 'CoreSe', 'N', 'g'], s => s.M0 * s.CoreSe * Math.pow(s.N, 2) / s.g),
-        'Lgap, H:', 'Lgap = M0 * Se * N&sup2 / g   (to real multiply by ~1.3-1.5)')
-    CalculationPresenter.create('gap-calcs',
-        new Calculation('Algap', ['CoreAl', 'Corele', 'CoreMe', 'g'], s => s.CoreAl * s.Corele / (s.CoreMe * s.g)),
-        'Algap, H/N&sup2:', 'Algap = CoreAl * le / (Me * g)   (to real multiply by ~1.8)')
 </script>
 </html>
