@@ -15,6 +15,12 @@
             font-size: 1.8rem;
             margin-left: 2rem;
         }
+        p.comment {
+            width: calc(var(--width) * 1.8);
+            margin: 2rem 1rem;
+            font-size: 0.95rem;
+            font-style: italic;
+        }
 
         div h4 {
             max-width: calc(var(--width) + 2.5rem);
@@ -62,19 +68,21 @@
 
     class State {
         /** @type {number} */ Uin
-        /** @type {number} */ Ton
+        /** @type {number} */ f
 
         /** @type {number} */ Uout
         /** @type {number} */ Iout
 
 
-        /** @type {number} */ Ipeak
+        /** @type {number} */ Ipk
         /** @type {number} */ L
-        /** @type {number} */ A
+        /** @type {number} */ Ton
+        /** @type {number} */ Toff
+        /** @type {number} */ Aimp
 
         constructor() {
             this.Uin = 310
-            this.Ton = 8e-6
+            this.f = 30000
         }
     }
 
@@ -249,18 +257,17 @@
     /** @param {number} value @return {string} */
     function formatValue(value) {
         if (typeof value === 'number') {
-            if (value === 0) {
-                return '0.0'
-            }
-            if (value < 0.1) {
+            let str = ''
+            if (Math.abs(value) > 0 && value < 0.1) {
                 let num = value
                 let pow = 0
-                while(num < 1.0) {
+                while(Math.abs(num) < 1.0) {
                     num = value * Math.pow(10, pow += 3)
                 }
-                return `${num.toPrecision(4)}e-${pow}`
+                str = `${num.toPrecision(4)}e-${pow}`
             }
-            return value.toPrecision(3)
+            else str = value.toPrecision(3)
+            return str.replace(/(:?\.\d+?)0+/, '$1')
         }
         return value ?? ''
     }
@@ -304,8 +311,9 @@
 
     ///////////////// Constants /////////////////
     CreateOptionsGroup('constants', 'Constants')
-    ParameterPresenter.create('constants', 'Uin', 'Supply DC voltage Uin, V:', 'Uin = Uac * 1.41')
-    ParameterPresenter.create('constants', 'Ton', 'Duty pulse duration Ton, s:', 'Ton = ~8us')
+    ParameterPresenter.create('constants', 'Uin', 'Rectified voltage Uin, V:', 'Uin = Uac * 1.41')
+    ParameterPresenter.create('constants', 'f', 'Switching frequency f, Hz:', '~30 kHz')
+    // ParameterPresenter.create('constants', 'Ton', 'Duty pulse duration Ton, s:', 'Ton = ~8us')
 
     ///////////////// LED Assembly Parameters /////////////////
     CreateOptionsGroup('led-data', 'LED Assembly Parameters')
@@ -315,21 +323,28 @@
     ///////////////// Calculations /////////////////
     CreateOptionsGroup('calcs', 'Calculations')
     CalculationPresenter.create('calcs',
-        new Calculation('Ipeak', ['Iout'], s => s.Iout * 2),
-         'Pulse current Ipeak, A:', 'Ipeak = Iout * 2')
+        new Calculation('Ipk', ['Iout'], s => s.Iout * 2),
+        'Inductor peak current Ipk, A:', 'Ipk = Iout * 2')
     CalculationPresenter.create('calcs',
-        new Calculation('L', ['Uin', 'Ton', 'Uout', 'Ipeak'], s => (s.Uin - s.Uout) * s.Ton / s.Ipeak),
-         'Inductor value L, H:', 'L = (Uin - Uout) * Ton / Ipeak')
-    CalculationPresenter.create('calcs',
-        new Calculation('A', ['L', 'Ipeak'], s => s.L * Math.pow(s.Ipeak, 2) / 2),
-         'Pulse energy A, J:', 'A = L * Ipeak&sup2; / 2')
+        new Calculation('L', ['Uout', 'Uin', 'f', 'Ipk'], s => s.Uout * (s.Uin - s.Uout) / (s.f * s.Ipk * s.Uin)),
+        'Inductance L, H:', 'L = Uout * (Uin - Uout) / (f * Ipk * Uin)')
 
     CalculationPresenter.create('calcs',
-        new Calculation('Toff', ['Uin', 'Ton', 'Uout'], s => s.Ton * (s.Uin - s.Uout) / s.Uout),
-         'Back pulse duration Toff, s:', 'Toff = Ton * (Uin - Uout) / Uout')
-    CalculationPresenter.create('calcs',
-        new Calculation('f', ['Ton', 'Toff'], s => 1e-3 / (s.Ton + s.Toff)),
-         'Work frequency f, kHz:', 'f = 1e-3 / (Ton + Toff)')
+        new Calculation('Ton', ['L', 'Ipk', 'Uin', 'Uout'], s => s.L * s.Ipk / (s.Uin - s.Uout)),
+        'Duty pulse duration Ton, s:', 'Ton = L * Ipk / (Uin - Uout)')
 
+    CalculationPresenter.create('calcs',
+        new Calculation('Toff', ['L', 'Ipk', 'Uout'], s => s.L * s.Ipk / s.Uout),
+        'Back pulse duration Toff, s:', 'Toff = L * Ipk / Uout')
+
+    CalculationPresenter.create('calcs',
+        new Calculation('Aimp', ['Ton', 'Ipk', 'Uin', 'Uout'], s => (s.Uin - s.Uout) * s.Ton * s.Ipk / 2),
+         'Impulse energy A, J:', 'Aimp = (Uin - Uout) * Ton * Ipk / 2')
+
+    ///////////////// Comments /////////////////
+    document.body.appendChild(document.createElement('p')).outerHTML =
+        '<p class="comment">The f is the system switching frequency, which is proportional to the input voltage. So the minimum switching frequency is set at lowest input voltage, and the maximum switching frequency is set at highest input voltage.</p>'
+    document.body.appendChild(document.createElement('p')).outerHTML =
+        '<p class="comment">The minimum and maximum off time of BP283x is set at 4.5us and 240us, respectively. Referring to the equation of tOFF calculation, if the inductance is too small, the tOFF may be smaller than the minimum off time, system will operate in discontinuous conduction mode and the output current will be smaller than the designed value. If the inductance is too large, the tOFF may be larger than the  maximum off time, the system will operate in continuous conduction mode and the output current will be higher than the designed value. So it is important to choose a proper inductance.</p>'
 </script>
 </html>
