@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<head>
+    <title>Coil Calculations</title>
+    <style>
+        :root {
+            /* --width: 400px; */
+            --width: 28rem;
+        }
+        * {
+            font-family: Consolas;
+            letter-spacing: -0.04em;
+            font-size: 1.02em;
+        }
+        h1 {
+            font-size: 1.8rem;
+            margin-left: 2rem;
+        }
+        p.comment {
+            width: calc(var(--width) * 1.8);
+            margin: 2rem 1rem;
+            font-size: 0.95rem;
+            font-style: italic;
+        }
+
+        div h4 {
+            max-width: calc(var(--width) + 2.5rem);
+            border-bottom: 1px solid #888;
+            font-size: large;
+        }        
+        div.param {
+            width: var(--width);
+            display: flex;
+            justify-content: flex-end;
+        }
+        div.param span {
+            position: absolute;
+            left: calc(var(--width) + 3rem);
+            margin: 0.45rem;
+            font-style: italic;
+        }
+        div.param button {
+            position: absolute;
+            left: calc(var(--width) + 0.5rem);
+            width: 1.65rem;
+            height: 1.65rem;
+            margin: 0.31rem;
+        }
+        div.param label {
+            margin: 0.3rem;
+            text-align: right;
+        }
+        input, select {
+            width: 9rem;
+            padding: 1px 2px;
+            box-sizing: border-box;
+        }
+        .error {
+            border-color: red;
+            background-color: rgba(255, 0, 0, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <h1>Coil Calculations</h1>
+</body>
+<script>
+    'use strict'
+
+    class State {
+        /** @type {number} */ Cint
+        /** @type {number} */ Cext
+
+        /** @type {number} */ F
+        /** @type {number} */ L
+
+        constructor() {
+            this.Cint = 4e-12
+            this.Cext = 150e-12
+        }
+    }
+
+    /** @callback CalcFunc @param {State} state @returns {number} */
+    /** @callback CondFunc @param {State} state @returns {boolean} */
+    
+    class Calculation {
+        /** @type {string} */ name
+        /** @type {string[]} */ deps
+        /** @type {CalcFunc} */ calc
+        /** @type {CondFunc} */ cond
+
+        /** @param {string} name @param {string[]} deps @param {CalcFunc} calc @param {CondFunc | undefined} cond */
+        constructor(name, deps, calc, cond) {
+            Calculation.all.push(this)
+            this.name = name
+            this.deps = deps
+            this.calc = calc
+            this.cond = cond
+        }
+
+        /** @param {string} parameterName @return {bool} */
+        isDependentFrom(parameterName) {
+            return this.deps.includes(parameterName)
+        }
+
+        /** @param {State} state @return {bool} */
+        isReadyToRun(state) {
+            return this.cond?.call(this, state) ?? this.deps.every(p => state[p] !== undefined)
+        }
+
+        /** @param {State} state */
+        calculate(state) {
+            state[this.name] = this.calc(state)
+        }
+
+        /** @type {Calculation[]} */ static all = []
+
+        /** @param {string} name @return {Calculation | null} */
+        static find(name) {
+            return Calculation.all.find(c => c.name === name)
+        }
+    }
+
+    class ParameterPresenter {
+        /** @type {string} */ name
+        /** @type {HTMLInputElement} */ input
+
+        /** @param {string} name */
+        constructor(name) {
+            this.name = name
+            this.input = document.querySelector(`input[type=text]#${name}`)
+            this.input.addEventListener('change', e => this.#onInputChanged(e))
+            this.updateInput()
+            ParameterPresenter.all.push(this)
+        }
+
+        /** @param {number | undefined} value */
+        setValue(value) {
+            state[this.name] = value
+            this.updateInput()
+        }
+
+        updateInput() {
+            this.input.value = formatValue(state[this.name])
+            ParameterPresenter.updateAll(this.name)
+        }
+
+        /** @param {string} name */
+        update(name) { }
+
+        /** @param {Event} event */
+        #onInputChanged(event) {
+            state[this.name] = getInputValue(this.input)
+            ParameterPresenter.updateAll(this.name)
+        }
+
+        /** @type {ParameterPresenter[]} */ static all = []
+
+        /** @param {string} name @return {ParameterPresenter | null} */
+        static find(name) {
+            return ParameterPresenter.all.find(c => c.name === name)
+        }
+
+        /** @param {string | undefined} name */
+        static updateAll(name) {
+            for (const pp of ParameterPresenter.all) {
+                pp.update(name)
+            }
+        }
+
+        /** @param {string} rootID @param {string} name @param {string} label @param {string} descr @return {ParameterPresenter} */
+        static create(rootID, name, label, descr = '') {
+            const html = '<div class="param"><label>{LBL} <input type="text" id="{EID}"></label><span>{DSC}</span></div>'
+                .replace('{EID}', name).replace('{LBL}', label).replace('{DSC}', descr)
+            document.getElementById(rootID).appendChild(document.createElement('div')).outerHTML = html
+
+            return new ParameterPresenter(name)
+        }
+    }
+
+    class CalculationPresenter extends ParameterPresenter {
+        /** @type {Calculation} */ calc
+        /** @type {HTMLButtonElement} */ button
+
+        /** @param {Calculation} calc */
+        constructor(calc) {
+            super(calc.name)
+            this.calc = calc
+            this.button = document.querySelector(`button#btn-${calc.name}`)
+            this.button.addEventListener('click', e => this.#onButtonClicked(e))
+            this.update()
+        }
+
+        /** @param {string | undefined} name */
+        update(name) {
+            if (name === undefined || this.calc.isDependentFrom(name)) {
+                this.button.disabled = !this.calc.isReadyToRun(state)
+            }
+        }
+
+        /** @param {Event} event */
+        #onButtonClicked(event) {
+            this.calc.calculate(state)
+            this.updateInput()
+        }
+
+        /** @param {string} rootID @param {Calculation} calc @param {string} label @param {string} descr @return {CalculationPresenter} */
+        static create(rootID, calc, label, descr = '') {
+            const html = '<div class="param"><label>{LBL} <input type="text" id="{EID}"></label><button id="btn-{EID}"><</button><span>{DSC}</span></div>'
+                .replaceAll('{EID}', calc.name).replace('{LBL}', label).replace('{DSC}', descr)
+            document.getElementById(rootID).appendChild(document.createElement('div')).outerHTML = html
+
+            return new CalculationPresenter(calc)
+        }
+    }
+
+    class ComboSelector {
+        /** @type {HTMLSelectElement} */ selector
+        /** @type {Object[]} */ items
+        /** @type {function(Object)} */ action
+
+        /** @template T @param {string} id @param {T[]} items @param {function(T)} action */
+        constructor(id, items, action) {
+            this.action = action
+
+            this.selector = document.querySelector(`select#${id}`)
+            this.selector.addEventListener('change', e => this.#onSelectorChange(e))
+
+            this.items = items
+            for (const item of items) {
+                this.selector.add(new Option(item.name))
+                this.selector.selectedIndex = -1;
+            }
+        }
+
+        /** @param {Event} event */
+        #onSelectorChange(event) {
+            this.action(this.items.find(e => e.name == event.target.value))
+        }
+
+        /** @template T @param {string} rootID @param {string} label @param {string} id @param {T[]} items @param {function(T)} action @return {ComboSelector} */
+        static create(rootID, label, id, items, action) {
+            const html = '<div class="param"><label>{LBL} <select id="{EID}"></select></label></div>'
+                .replace('{EID}', id).replace('{LBL}', label)
+            document.getElementById(rootID).appendChild(document.createElement('div')).outerHTML = html
+
+            return new ComboSelector(id, items, action)
+        }
+    }
+
+    /** @param {number} value @return {string} */
+    function formatValue(value) {
+        if (typeof value === 'number') {
+            let str = ''
+            if (Math.abs(value) > 0 && value < 0.1) {
+                let num = value
+                let pow = 0
+                while(Math.abs(num) < 1.0) {
+                    num = value * Math.pow(10, pow += 3)
+                }
+                str = `${num.toPrecision(4)}e-${pow}`
+            }
+            else str = value.toPrecision(3)
+            return str.replace(/(:?\.\d+?)0+/, '$1')
+        }
+        return value ?? ''
+    }
+
+    /** @param {HTMLInputElement} input @result {number} */
+    function getInputValue(input) {
+       try {
+            const str = input.value.trim()
+
+            if (/^[\+\-]?\d*\.?\d+(?:[Ee][\+\-]?\d+)?$/.test(str)) {
+                return parseFloat(str)
+            }
+            else if (str.length > 0) {
+                const val = eval(str)
+                if (typeof val === 'number') {
+                    input.value = formatValue(val)
+                    return val
+                }
+                throw Error('Numeric value expected')
+            }
+
+            if(input.classList.contains('error')) {
+                input.classList.remove('error')
+            }
+        }
+        catch(err) {
+            input.classList.add('error')
+        }
+        return undefined
+    }
+
+    /** @param {string} id @param {string} title @param {string | undefined} rootID @return {HTMLDivElement} */
+    function CreateOptionsGroup(id, title, rootID) {
+        const root = rootID ? document.getElementById(rootID) : document.body
+        const elem = root.appendChild(document.createElement('div'))
+        elem.outerHTML = '<div id="{GID}"><h4>{TTL}</h4></div>'.replace('{GID}', id).replace('{TTL}', title)
+        return elem
+    }
+
+    const state = new State()
+
+    ///////////////// Inductance by frequency Calculation /////////////////
+    CreateOptionsGroup('ibf', 'Inductance by frequency')
+    ParameterPresenter.create('ibf', 'Cint', 'Internal capacitance Cint, F:', '~ 4pF')
+    ParameterPresenter.create('ibf', 'Cext', 'External capacitance Cext, F:', '~ 150pF')
+    ParameterPresenter.create('ibf', 'F', 'Resonant frequency F, Hz:', 'F = 1 / (2 * PI * sqrt(L * C))')
+    CalculationPresenter.create('ibf',
+        new Calculation('L', ['Cint', 'Cext', 'F'], s => 1 / (Math.pow(2 * Math.PI * s.F, 2) * (s.Cint + s.Cext))),
+        'Inductance L, H:', 'L = 1 / ((2 * PI * F)&sup2; * C)')
+
+    /** @param {number[]} data @return {string[]} */
+    function ibfCal(data) {
+        const caps = state.Cint + state.Cext
+        const calc = (f) => 1 / (Math.pow(2 * Math.PI * f, 2) * caps)
+        return data.map(f => formatValue(calc(f)))
+    }
+
+    //ibfCal([1.82e6, 1.28e6, 482e3])
+</script>
+</html>
